@@ -78,23 +78,92 @@ func TestClient_Units(t *testing.T) {
 		t.Error("Return slice must contain exactly 1 items")
 	}
 
-	if units[0].CurrentState != "loaded" {
+	validateUnit(&units[0], t)
+}
+
+func TestClient_Unit(t *testing.T) {
+	unitsJson := `{
+	  "currentState": "loaded",
+  	  "desiredState": "launched",
+	  "machineID": "9f08c99f7d9a304499004fd01891b396",
+	  "name": "foo.service",
+	  "options": [
+	    {
+	      "name": "After",
+	      "section": "Unit",
+	      "value": "docker.service"
+	    },
+	    {
+	      "name": "Restart",
+	      "section": "Service",
+	      "value": "on-failure"
+	    },
+	    {
+	      "name": "RestartSec",
+	      "section": "Service",
+	      "value": "25s"
+	    },
+	    {
+	      "name": "ExecStart",
+	      "section": "Service",
+	      "value": "/bin/bash -c \"while true; do echo 'hello' && sleep 1; done\""
+	    }
+	  ]
+	}`
+
+	baseUrl, _ := url.ParseRequestURI("http://fleet.example.com:4001/")
+	senderMock := &requestSenderMock{
+		httpResponse: &http.Response{
+			Status:     "OK",
+			StatusCode: 200,
+			Body:       ioutil.NopCloser(bytes.NewBufferString(unitsJson)),
+		},
+	}
+
+	client := &Client{
+		baseUrl:       baseUrl,
+		requestSender: senderMock,
+	}
+
+	unit, err := client.Unit("foo.service")
+
+	if nil != err {
+		t.Error("Error supposed to be nil")
+	}
+
+	if http.MethodGet != senderMock.httpRequest.Method {
+		t.Error("Request header must be GET")
+	}
+
+	if "http://fleet.example.com:4001/fleet/v1/units/foo.service" != senderMock.httpRequest.URL.String() {
+		t.Error("Request URL must be http://fleet.example.com:4001/fleet/v1/units/foo.service")
+	}
+
+	if "application/json" != senderMock.httpRequest.Header.Get("Content-Type") {
+		t.Error("Content-Type header must be application/json")
+	}
+
+	validateUnit(unit, t)
+}
+
+func validateUnit(unit *Unit, t *testing.T) {
+	if unit.CurrentState != "loaded" {
 		t.Error("Wrong unit current state")
 	}
 
-	if units[0].DesiredState != "launched" {
+	if unit.DesiredState != "launched" {
 		t.Error("Wrong unit desired state")
 	}
 
-	if units[0].MachineID != "9f08c99f7d9a304499004fd01891b396" {
+	if unit.MachineID != "9f08c99f7d9a304499004fd01891b396" {
 		t.Error("Wrong unit machinedID")
 	}
 
-	if units[0].Name != "foo.service" {
+	if unit.Name != "foo.service" {
 		t.Error("Wrong unit name")
 	}
 
-	if len(units[0].Options) != 4 {
+	if len(unit.Options) != 4 {
 		t.Error("Options slice must contain exactly 4 items")
 	}
 	expectedOptions := []UnitOption{
@@ -121,16 +190,17 @@ func TestClient_Units(t *testing.T) {
 	}
 
 	for key, expectedOption := range expectedOptions {
-		if units[0].Options[key].Name != expectedOption.Name {
+		if unit.Options[key].Name != expectedOption.Name {
 			t.Errorf("Wrong option %d name", key)
 		}
 
-		if units[0].Options[key].Section != expectedOption.Section {
+		if unit.Options[key].Section != expectedOption.Section {
 			t.Errorf("Wrong option %d section", key)
 		}
 
-		if units[0].Options[key].Value != expectedOption.Value {
+		if unit.Options[key].Value != expectedOption.Value {
 			t.Errorf("Wrong option %d value", key)
 		}
 	}
 }
+
